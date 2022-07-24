@@ -1,0 +1,43 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  IMG_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  MS_NAME: example-microservice
+  CHART: chart/example-k8s-microservice
+  NAMESPACE: apps
+  DOCKER_REGISTRY: http://registry.example.lan/v2/
+
+golangci-lint:
+  stage: test
+  image: golangci/golangci-lint:v1.27.0
+  script:
+    - golangci-lint run -v
+
+helm-lint:
+  stage: test
+  image: alpine/helm:3.9.0
+  script:
+    - helm lint $CHART
+
+build:
+  stage: build
+  image: docker
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $DOCKER_REGISTRY
+    - docker build -t $IMG_TAG
+    - docker push $IMG_TAG  
+
+deploy-to-mimkube:
+  stage: deploy
+  image: alpine/helm:3.9.0
+  before_script:
+    - echo $KUBECONFIG > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    - helm upgrade --install $MS_NAME $CHART -n $NAMESPACE
+  only:
+    refs:
+      - main
